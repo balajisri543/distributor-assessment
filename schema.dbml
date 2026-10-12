@@ -1,0 +1,64 @@
+Project distributor_assessment {
+  Note: 'MongoDB collection mapping, not a relational schema. References below are logical only, not database-enforced foreign keys. All collections also have a unique _id index. Mongoose versionKey is disabled.'
+}
+Table users {
+  _id ObjectId [pk]
+  name string [not null]
+  role string [not null, note: 'Distributor or SalesManager']
+  creditLimit number [not null, note: 'Safe integer paise, minimum 0']
+  revision number [not null, default: 0, note: 'Safe integer, minimum 0']
+}
+Table products {
+  _id ObjectId [pk]
+  sku string [not null, unique]
+  name string [not null]
+  price number [not null, note: 'Safe integer paise, minimum 0']
+  stock number [not null, note: 'Safe integer, minimum 0']
+  reserved number [not null, default: 0, note: 'Safe integer, minimum 0']
+}
+Table orders {
+  _id ObjectId [pk]
+  distributor ObjectId [not null]
+  idempotencyKey string [not null]
+  requestSignature string [not null]
+  lines json [not null, note: 'Embedded array, no subdocument _id: product ObjectId required; sku string required; name string required; price number safe integer minimum 0 required; quantity number safe integer minimum 1 required. product logically references products._id. Not a separate collection.']
+  status string [not null, note: 'Placed, PendingApproval, Confirmed, Dispatched, Delivered, Cancelled, Rejected']
+  discountPercent number [not null, note: 'Safe integer minimum 0']
+  subtotal number [not null, note: 'Safe integer paise minimum 0']
+  discount number [not null, note: 'Safe integer paise minimum 0']
+  total number [not null, note: 'Safe integer paise minimum 0']
+  createdAt datetime [not null]
+  indexes { (distributor, idempotencyKey) [unique] }
+}
+Table awards {
+  _id ObjectId [pk]
+  distributor ObjectId [not null]
+  order ObjectId [not null, unique]
+  points number [not null, note: 'Safe integer minimum 0']
+  awardedAt datetime [not null]
+  reversedAt datetime [default: null]
+}
+Table events {
+  _id ObjectId [pk]
+  order ObjectId [not null]
+  from string [default: null]
+  to string [not null, note: 'Same status enum as orders.status']
+  actor ObjectId [not null]
+  actorName string [not null]
+  occurredAt datetime [not null]
+}
+Table outboxes {
+  _id ObjectId [pk]
+  event ObjectId [not null, unique]
+  attempts number [not null, default: 0, note: 'Safe integer minimum 0']
+  nextAttemptAt datetime [not null]
+  deliveredAt datetime [default: null]
+  failed boolean [not null, default: false]
+  lastError string [default: '']
+}
+Ref: orders.distributor > users._id
+Ref: awards.distributor > users._id
+Ref: awards.order - orders._id
+Ref: events.order > orders._id
+Ref: events.actor > users._id
+Ref: outboxes.event - events._id
