@@ -16,6 +16,8 @@ Open http://localhost:3000. First startup downloads a MongoDB binary and starts 
 
 To use your own MongoDB, set MONGO_URL in `.env` to a replica-set connection string. Transactions require a replica set. The automatic database is for local assessment use only.
 
+A default standalone connection such as `mongodb://localhost:27017/task_related` does not support these transactions. Keep `MONGO_URL=` empty to use the included replica set. While the app is running, MongoDB Compass can view that local database with `mongodb://127.0.0.1:27018/distributor_assessment?replicaSet=assessment-rs&directConnection=true`. It is separate from any existing database on port 27017. External connections are checked for transaction-compatible topology before model indexes or seed data are initialized.
+
 ## Starting twice
 
 If the app is already running, another `npm start` prints the existing address and exits without starting another database. To restart, press Ctrl+C in the original app terminal, then run `npm start` again. If another service occupies the app port, startup reports that conflict clearly. If port 27018 is occupied, stop the earlier local database/app process before restarting; do not erase `.data/mongo` or its lock files.

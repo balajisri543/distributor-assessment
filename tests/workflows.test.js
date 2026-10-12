@@ -1,5 +1,6 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import { connectDatabase } from '../server/database.js';
 import { seedIfEmpty } from '../server/seed.js';
 import { createApp } from '../server/app.js';
@@ -8,6 +9,7 @@ import { loyalty } from '../server/orders.js';
 import { createERPWorker } from '../server/erp.js';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 
 let closeDatabase, server, base, users, products;
 before(async () => {
@@ -37,8 +39,8 @@ const place = (actor, lines, key = crypto.randomUUID()) => request(actor, '/orde
 const line = (sku, quantity) => ({ product: String(product(sku)._id), quantity });
 const change = (actor, id, status) => request(actor, `/orders/${id}/status`, { method: 'POST', body: { status } });
 
-async function launchAgain(port) {
-  const child = spawn(process.execPath, ['server/start.js'], { env: { ...process.env, PORT: String(port), MONGO_URL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+async function launchAgain(port, mongoUrl = '') {
+  const child = spawn(process.execPath, ['server/start.js'], { env: { ...process.env, PORT: String(port), MONGO_URL: mongoUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', chunk => { output += chunk; });
   child.stderr.on('data', chunk => { output += chunk; });
@@ -68,6 +70,20 @@ test('unrelated occupied application port reports a controlled error', async () 
     assert.match(result.output, /already in use/);
     assert.doesNotMatch(result.output, /Starting local MongoDB|SyntaxError/);
   } finally { await new Promise(resolve => occupied.close(resolve)); }
+});
+
+test('standalone MongoDB is rejected clearly before seeding', async () => {
+  const standalone = await MongoMemoryServer.create({ binary: { version: '7.0.24' } });
+  try {
+    const result = await launchAgain(0, standalone.getUri('standalone_probe'));
+    assert.equal(result.code, 1);
+    assert.match(result.output, /standalone MongoDB/);
+    assert.match(result.output, /Leave MONGO_URL empty/);
+    assert.doesNotMatch(result.output, /Created eight products|Transaction numbers/);
+    const connection = await mongoose.createConnection(standalone.getUri('standalone_probe')).asPromise();
+    try { assert.deepEqual(await connection.db.listCollections().toArray(), []); }
+    finally { await connection.close(); }
+  } finally { await standalone.stop(); }
 });
 
 test('seed, catalogue, user access and historical tiers', async () => {

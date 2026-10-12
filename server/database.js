@@ -24,7 +24,15 @@ export async function connectDatabase({ temporary = false } = {}) {
   }
   try {
     await mongoose.connect(uri);
-    for (const model of models) await model.init();
+    const topology = await mongoose.connection.db.admin().command({ hello: 1 });
+    if (!topology.setName && topology.msg !== 'isdbgrid') {
+      throw new Error('MONGO_URL points to standalone MongoDB, which cannot run order transactions. Leave MONGO_URL empty in .env to use the included local replica set, or provide a replica-set/Atlas connection string. The connected database was not seeded or modified.');
+    }
+    // Initialize collections only AFTER checking transaction support.
+    for (const model of models) {
+      await model.createCollection();
+      await model.createIndexes();
+    }
   } catch (error) {
     await mongoose.disconnect();
     if (localMongo) await localMongo.stop({ doCleanup: temporary });

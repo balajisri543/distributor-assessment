@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 const { Schema } = mongoose;
-const options = { versionKey: false };
+const options = { versionKey: false, autoCreate: false, autoIndex: false };
 const ref = model => ({ type: Schema.Types.ObjectId, ref: model, required: true });
 const integer = (min = 0) => ({ type: Number, required: true, min, validate: Number.isSafeInteger });
 export const statuses = ['Placed', 'PendingApproval', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Rejected'];
