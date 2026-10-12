@@ -40,7 +40,7 @@ const line = (sku, quantity) => ({ product: String(product(sku)._id), quantity }
 const change = (actor, id, status) => request(actor, `/orders/${id}/status`, { method: 'POST', body: { status } });
 
 async function launchAgain(port, mongoUrl = '') {
-  const child = spawn(process.execPath, ['server/start.js'], { env: { ...process.env, PORT: String(port), MONGO_URL: mongoUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['server/start.js'], { env: { ...process.env, PORT: String(port), MONGO_MODE: mongoUrl ? 'external' : 'local', MONGO_URL: mongoUrl }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', chunk => { output += chunk; });
   child.stderr.on('data', chunk => { output += chunk; });
@@ -78,7 +78,7 @@ test('standalone MongoDB is rejected clearly before seeding', async () => {
     const result = await launchAgain(0, standalone.getUri('standalone_probe'));
     assert.equal(result.code, 1);
     assert.match(result.output, /standalone MongoDB/);
-    assert.match(result.output, /Leave MONGO_URL empty/);
+    assert.match(result.output, /MONGO_MODE=local/);
     assert.doesNotMatch(result.output, /Created eight products|Transaction numbers/);
     const connection = await mongoose.createConnection(standalone.getUri('standalone_probe')).asPromise();
     try { assert.deepEqual(await connection.db.listCollections().toArray(), []); }

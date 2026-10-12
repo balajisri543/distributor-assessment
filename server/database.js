@@ -8,7 +8,7 @@ import { models } from './models.js';
 export async function connectDatabase({ temporary = false } = {}) {
   let localMongo;
   let uri = temporary ? '' : process.env.MONGO_URL;
-  if (!uri) {
+  if (temporary || !uri || process.env.MONGO_MODE === 'local') {
     if (!temporary && await isPortOpen(27018)) {
       throw new Error('Local MongoDB port 27018 is already in use. Stop the earlier app terminal with Ctrl+C before restarting. Your saved data has not been changed.');
     }
@@ -20,13 +20,14 @@ export async function connectDatabase({ temporary = false } = {}) {
       instanceOpts: temporary ? [] : [{ dbPath: dataPath, port: 27018 }],
       replSet: { count: 1, storageEngine: 'wiredTiger', name: 'assessment-rs' }
     });
-    uri = localMongo.getUri(temporary ? 'assessment_tests' : 'distributor_assessment');
+    // Tests always use an isolated database. The app uses the URL from .env.
+    uri = temporary ? localMongo.getUri('assessment_tests') : (uri || localMongo.getUri('distributor_assessment'));
   }
   try {
     await mongoose.connect(uri);
     const topology = await mongoose.connection.db.admin().command({ hello: 1 });
     if (!topology.setName && topology.msg !== 'isdbgrid') {
-      throw new Error('MONGO_URL points to standalone MongoDB, which cannot run order transactions. Leave MONGO_URL empty in .env to use the included local replica set, or provide a replica-set/Atlas connection string. The connected database was not seeded or modified.');
+      throw new Error('MONGO_URL points to standalone MongoDB, which cannot run order transactions. Use MONGO_MODE=local with the supplied local replica-set URL, or MONGO_MODE=external with a replica-set/Atlas connection string. The connected database was not seeded or modified.');
     }
     // Initialize collections only AFTER checking transaction support.
     for (const model of models) {
