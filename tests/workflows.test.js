@@ -6,6 +6,8 @@ import { createApp } from '../server/app.js';
 import { User, Product, Order, Award, Event, Outbox } from '../server/models.js';
 import { loyalty } from '../server/orders.js';
 import { createERPWorker } from '../server/erp.js';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
 
 let closeDatabase, server, base, users, products;
 before(async () => {
@@ -34,6 +36,39 @@ async function request(actor, endpoint, { method = 'GET', body, key } = {}) {
 const place = (actor, lines, key = crypto.randomUUID()) => request(actor, '/orders', { method: 'POST', body: { lines }, key });
 const line = (sku, quantity) => ({ product: String(product(sku)._id), quantity });
 const change = (actor, id, status) => request(actor, `/orders/${id}/status`, { method: 'POST', body: { status } });
+
+async function launchAgain(port) {
+  const child = spawn(process.execPath, ['server/start.js'], { env: { ...process.env, PORT: String(port), MONGO_URL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', chunk => { output += chunk; });
+  const timeout = setTimeout(() => child.kill(), 10000);
+  const code = await new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  clearTimeout(timeout);
+  return { code, output };
+}
+
+test('second startup detects the running app before launching MongoDB', async () => {
+  const result = await launchAgain(server.address().port);
+  assert.equal(result.code, 0);
+  assert.match(result.output, /already running/);
+  assert.doesNotMatch(result.output, /Starting local MongoDB|SyntaxError/);
+});
+
+test('unrelated occupied application port reports a controlled error', async () => {
+  const occupied = http.createServer((req, res) => {
+    res.setHeader('Connection', 'close');
+    res.setHeader('Content-Type', 'application/json');
+    res.end('{}');
+  });
+  await new Promise(resolve => occupied.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await launchAgain(occupied.address().port);
+    assert.equal(result.code, 1);
+    assert.match(result.output, /already in use/);
+    assert.doesNotMatch(result.output, /Starting local MongoDB|SyntaxError/);
+  } finally { await new Promise(resolve => occupied.close(resolve)); }
+});
 
 test('seed, catalogue, user access and historical tiers', async () => {
   assert.equal(users.length, 4); assert.equal(products.length, 8);

@@ -2,12 +2,16 @@ import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import net from 'node:net';
 import { models } from './models.js';
 
 export async function connectDatabase({ temporary = false } = {}) {
   let localMongo;
   let uri = temporary ? '' : process.env.MONGO_URL;
   if (!uri) {
+    if (!temporary && await isPortOpen(27018)) {
+      throw new Error('Local MongoDB port 27018 is already in use. Stop the earlier app terminal with Ctrl+C before restarting. Your saved data has not been changed.');
+    }
     const dataPath = path.resolve('.data/mongo');
     if (!temporary) await mkdir(dataPath, { recursive: true });
     console.log(temporary ? 'Starting test database…' : 'Starting local MongoDB (first run downloads MongoDB)…');
@@ -18,10 +22,31 @@ export async function connectDatabase({ temporary = false } = {}) {
     });
     uri = localMongo.getUri(temporary ? 'assessment_tests' : 'distributor_assessment');
   }
-  await mongoose.connect(uri);
-  for (const model of models) await model.init();
+  try {
+    await mongoose.connect(uri);
+    for (const model of models) await model.init();
+  } catch (error) {
+    await mongoose.disconnect();
+    if (localMongo) await localMongo.stop({ doCleanup: temporary });
+    throw error;
+  }
   return async () => {
     await mongoose.disconnect();
     if (localMongo) await localMongo.stop({ doCleanup: temporary });
   };
+}
+
+async function isPortOpen(port) {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+    function finish(open) {
+      if (settled) return;
+      settled = true; socket.destroy(); resolve(open);
+    }
+    socket.setTimeout(1000);
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
 }

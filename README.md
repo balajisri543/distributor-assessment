@@ -16,6 +16,10 @@ Open http://localhost:3000. First startup downloads a MongoDB binary and starts 
 
 To use your own MongoDB, set MONGO_URL in `.env` to a replica-set connection string. Transactions require a replica set. The automatic database is for local assessment use only.
 
+## Starting twice
+
+If the app is already running, another `npm start` prints the existing address and exits without starting another database. To restart, press Ctrl+C in the original app terminal, then run `npm start` again. If another service occupies the app port, startup reports that conflict clearly. If port 27018 is occupied, stop the earlier local database/app process before restarting; do not erase `.data/mongo` or its lock files.
+
 ## Verify
 
 ```powershell

@@ -9,7 +9,11 @@ const route = handler => (req, res, next) => Promise.resolve(handler(req, res, n
 export function createApp() {
   const app = express();
   app.use(express.json({ limit: '64kb' }));
-  app.get('/api/health', (req, res) => res.json({ ready: mongoose.connection.readyState === 1 }));
+  app.get('/api/health', (req, res) => res.json({ application: 'distributor-orders', ready: mongoose.connection.readyState === 1 }));
+  app.use((req, res, next) => {
+    if (mongoose.connection.readyState !== 1) return res.status(503).json({ error: 'Database is starting. Please try again shortly.' });
+    next();
+  });
   app.get('/api/users', route(async (req, res) => res.json(await User.find().sort({ name: 1 }))));
   app.use('/api', route(async (req, res, next) => {
     const id = req.header('x-user-id');
