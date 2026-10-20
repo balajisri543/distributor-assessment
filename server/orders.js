@@ -18,7 +18,11 @@ export async function loyalty(distributor, session = null) {
   const since = new Date(Date.now() - 90 * 86400000);
   const awards = await Award.find({ distributor, awardedAt: { $gte: since, $lte: new Date() }, reversedAt: null }).session(session);
   const points = awards.reduce((sum, item) => sum + item.points, 0);
+  console.log(awards,'awards')
+  console.log(points,'points')
+
   const tier = points >= 5000 ? 'Gold' : points >= 1000 ? 'Silver' : 'Bronze';
+  console.log(tier)
   return { points, tier, discountPercent: tier === 'Gold' ? 6 : tier === 'Silver' ? 3 : 0 };
 }
 
